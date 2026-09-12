@@ -1,0 +1,33 @@
+clock_model_service
+====================
+
+This microservice serves the ChessMimic "clock model" (predicts how long a
+human would think on a chess move) for a personal, noncommercial hobby project.
+
+It uses the trained model checkpoint, scalers, bucket metadata, and portions of
+the model/inference code from the ChessMimic project:
+
+    1e4_ai by Thomas Johnson
+    https://github.com/thomasj02/1e4_ai
+
+Those materials are licensed under the PolyForm Noncommercial License 1.0.0.
+Use here is strictly noncommercial, which that license permits.
+
+Required Notice: Copyright 2026 Thomas Johnson (https://github.com/thomasj02/1e4_ai)
+
+Vendored / derived files (PolyForm Noncommercial License 1.0.0):
+  - model.py               (derived from Training/ClockTrainer.py: ClockPatzerModel)
+  - clock_bucket_utils.py  (derived from Training/clock_bucket_utils.py)
+  - predictor.py           (replicates backend/clock_inference.py ClockPredictor)
+  - models/model.ckpt      (trained checkpoint)
+  - models/scalers.pkl     (feature scalers)
+  - models/clock_buckets.json (bucket boundaries + empirical distributions)
+
+Original work in this service (not derived from PolyForm-licensed sources):
+  - tokenizer.py           (original pure-Python reimplementation of the FEN
+                            tokenizer and UCI action space; the tokenization
+                            scheme itself originates in DeepMind's
+                            searchless_chess project, Apache License 2.0)
+  - server.py              (Flask HTTP wrapper)
+
+The upstream LICENSE text is reproduced in the LICENSE file in this directory.

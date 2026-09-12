@@ -1,0 +1,13 @@
+# The model artifacts are downloaded during the image build, not copied from
+# the build context, so exclude the local copy (and everything else heavy).
+models/
+_upstream_ref/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+server_test.log
+.git/
+.gitignore
+.venv/
+venv/

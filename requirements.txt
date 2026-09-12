@@ -1,0 +1,15 @@
+# Python dependencies for the clock-model microservice.
+#
+# NOTE on PyTorch (CPU): the default PyPI "torch" wheel pulls in large CUDA
+# libraries. For a lean CPU-only image, install torch from the PyTorch CPU
+# index. The Dockerfile does this explicitly:
+#
+#     pip install --index-url https://download.pytorch.org/whl/cpu torch==2.8.0
+#
+# If you install from this file directly on a CPU-only host, either use the
+# CPU index url as above, or accept the default (larger) wheel.
+
+flask>=3.0,<4.0
+gunicorn>=21.2,<24.0
+numpy>=1.24,<3.0
+torch==2.8.0
