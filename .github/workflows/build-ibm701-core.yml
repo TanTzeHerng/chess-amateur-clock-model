@@ -1,0 +1,54 @@
+name: Build IBM701 core runtime
+
+on:
+  push:
+    branches: [ibm701-ci-debug]
+  workflow_dispatch:
+
+concurrency:
+  group: ibm701-core-build
+  cancel-in-progress: true
+
+jobs:
+  build-core:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout project branch
+        uses: actions/checkout@v4
+
+      - name: Setup MinGW
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+
+      - name: Compile standalone runtime
+        shell: msys2 {0}
+        run: |
+          set -eux
+          gcc -O3 -std=c11 -DNDEBUG -static -static-libgcc ibm701-ci/ibm701_core.c -o ibm701_core.exe
+          strip ibm701_core.exe
+          ls -l ibm701_core.exe
+          sha256sum ibm701_core.exe
+
+      - name: Runtime self-test
+        shell: powershell
+        run: |
+          Set-Content stop.oct -Encoding ascii -Value '0 000000000000'
+          .\ibm701_core.exe stop.oct 0 1000 1000 snapshot.bin stop.flag | Tee-Object core-test.log
+          if ($LASTEXITCODE -ne 0) { throw "runtime exit code $LASTEXITCODE" }
+          if (-not (Select-String core-test.log -SimpleMatch 'status=0 halted=1 steps=1' -Quiet)) {
+            throw 'runtime STOP self-test failed'
+          }
+          if ((Get-Item snapshot.bin).Length -ne 16384) { throw 'bad snapshot size' }
+
+      - name: Upload runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: ibm701-core-windows-x64
+          path: |
+            ibm701_core.exe
+            core-test.log
