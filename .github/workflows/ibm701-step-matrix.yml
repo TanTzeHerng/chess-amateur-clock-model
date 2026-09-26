@@ -1,0 +1,52 @@
+name: IBM701 STEP matrix
+
+on:
+  push:
+    branches: [ibm701-ci-debug]
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        stepcount: [25000, 1000000, 10000000, 25000000, 50000000, 100000000, 200000000, 500000000]
+    steps:
+      - name: Download pinned Open SIMH
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/simh/Development-Binaries/raw/refs/heads/master/simh-2024-07-05_06-07-03-Windows-Win32-4.0-Current-670a3728.zip'
+          curl.exe -L -f --retry 3 -o simh.zip $url
+          $h = (Get-FileHash simh.zip -Algorithm SHA256).Hash.ToLower()
+          if ($h -ne '55c2dde9824b412baf8138adc4d4b545398de99a5c28d2a392b863244c660d65') { throw "hash mismatch $h" }
+          Expand-Archive simh.zip -DestinationPath simh-unpack
+          $exe = Get-ChildItem simh-unpack -Recurse -Filter i701.exe | Select-Object -First 1
+          Copy-Item $exe.FullName .\i701.exe
+
+      - name: Run STEP ${{ matrix.stepcount }}
+        shell: powershell
+        run: |
+          $n = '${{ matrix.stepcount }}'
+          Set-Content -Path loop.oct -Encoding ascii -Value '0 010000010000'
+          $lines = @('set nothrottle','load loop.oct','deposit IC 0',"step $n","echo AFTER_STEP_$n",'examine IC','quit')
+          Set-Content -Path test.ini -Encoding ascii -Value ($lines -join [Environment]::NewLine)
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          cmd.exe /d /c ".\i701.exe test.ini > simh.log 2>&1"
+          $rc = $LASTEXITCODE
+          $sw.Stop()
+          $marker = Select-String -Path simh.log -SimpleMatch "AFTER_STEP_$n" -Quiet
+          $expired = Select-String -Path simh.log -Pattern 'Step expired' -Quiet
+          $abort = Select-String -Path simh.log -SimpleMatch 'Runtime to terminate it in an unusual way' -Quiet
+          Write-Host "RESULT step=$n rc=$rc sec=$([math]::Round($sw.Elapsed.TotalSeconds,3)) marker=$marker expired=$expired abort=$abort"
+          Get-Content simh.log -Tail 50
+          if (-not $marker) { exit 20 }
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: step-${{ matrix.stepcount }}
+          path: simh.log
