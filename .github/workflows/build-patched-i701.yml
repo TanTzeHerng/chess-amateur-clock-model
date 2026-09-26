@@ -1,0 +1,97 @@
+name: Build patched IBM701 SIMH
+
+on:
+  push:
+    branches: [ibm701-ci-debug]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout SIMH
+        uses: actions/checkout@v4
+        with:
+          repository: simh/simh
+          path: simh
+
+      - name: Patch IBM 701 memory model
+        shell: powershell
+        run: |
+          $defs = 'simh/I7000/i7000_defs.h'
+          $cpu = 'simh/I7000/i701_cpu.c'
+
+          $d = Get-Content $defs -Raw
+          $old = '#define MEMSIZE         (cpu_unit.capac)                /* actual memory size */'
+          $new = @(
+            '#ifdef I701',
+            '#define MEMSIZE         (MAXMEMSIZE)                     /* physical 36-bit words */',
+            '#else',
+            '#define MEMSIZE         (cpu_unit.capac)                 /* actual memory size */',
+            '#endif'
+          ) -join [Environment]::NewLine
+          if (-not $d.Contains($old)) { throw 'MEMSIZE patch anchor not found' }
+          $d = $d.Replace($old, $new)
+          Set-Content $defs -Value $d -Encoding ascii
+
+          $c = Get-Content $cpu -Raw
+          $old2 = '{ UDATA(NULL, UNIT_BINK, MAXMEMSIZE / 2) };'
+          $new2 = '{ UDATA(NULL, UNIT_BINK, MAXMEMSIZE * 2) };'
+          if (-not $c.Contains($old2)) { throw 'cpu_unit patch anchor not found' }
+          $c = $c.Replace($old2, $new2)
+          Set-Content $cpu -Value $c -Encoding ascii
+
+          Select-String -Path $defs -Pattern 'MEMSIZE'
+          Select-String -Path $cpu -Pattern 'UDATA\(NULL, UNIT_BINK'
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkgconf
+            git
+
+      - name: Build i701.exe
+        shell: msys2 {0}
+        run: |
+          set -eux
+          cd simh
+          make -j2 i701
+          ls -l BIN/i701.exe
+          sha256sum BIN/i701.exe
+
+      - name: Self-test memory and STEP
+        shell: powershell
+        run: |
+          Copy-Item simh\BIN\i701.exe .\i701-patched.exe
+          Set-Content loop.oct -Encoding ascii -Value '0 010000010000'
+          $lines = @(
+            'set nothrottle',
+            'load loop.oct',
+            'deposit IC 0',
+            'step 1000000',
+            'echo PATCHED_STEP_OK',
+            'examine IC',
+            'echo PATCHED_UPPER_MEMORY',
+            'examine 7776-7777',
+            'quit'
+          )
+          Set-Content test.ini -Encoding ascii -Value ($lines -join [Environment]::NewLine)
+          cmd.exe /d /c ".\i701-patched.exe test.ini > patched-test.log 2>&1"
+          $rc = $LASTEXITCODE
+          Get-Content patched-test.log -Tail 80
+          if (-not (Select-String patched-test.log -SimpleMatch 'PATCHED_STEP_OK' -Quiet)) { throw "STEP failed rc=$rc" }
+          if (-not (Select-String patched-test.log -SimpleMatch 'PATCHED_UPPER_MEMORY' -Quiet)) { throw 'upper-memory examine failed' }
+
+      - name: Upload patched i701
+        uses: actions/upload-artifact@v4
+        with:
+          name: i701-patched-windows
+          path: |
+            i701-patched.exe
+            patched-test.log
