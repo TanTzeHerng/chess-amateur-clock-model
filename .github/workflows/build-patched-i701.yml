@@ -5,6 +5,10 @@ on:
     branches: [ibm701-ci-debug]
   workflow_dispatch:
 
+concurrency:
+  group: ibm701-build-debug
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
