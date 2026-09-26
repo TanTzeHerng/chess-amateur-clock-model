@@ -29,7 +29,6 @@ jobs:
       - name: Create infinite-loop IBM 701 image
         shell: powershell
         run: |
-          # Two halfword instructions, both "TR 0".
           Set-Content -Path loop.oct -Encoding ascii -Value '0 010000010000'
 
       - name: Sweep STEP sizes
@@ -38,16 +37,16 @@ jobs:
           $sizes = @(25000, 1000000, 10000000, 50000000, 100000000, 200000000, 300000000, 400000000, 500000000)
           $rows = @()
           foreach ($n in $sizes) {
-            $ini = @"
-set nothrottle
-load loop.oct
-deposit IC 0
-step $n
-echo AFTER_STEP_$n
-examine IC
-quit
-"@
-            Set-Content -Path "step_$n.ini" -Encoding ascii -Value $ini
+            $lines = @(
+              'set nothrottle',
+              'load loop.oct',
+              'deposit IC 0',
+              "step $n",
+              "echo AFTER_STEP_$n",
+              'examine IC',
+              'quit'
+            )
+            Set-Content -Path "step_$n.ini" -Encoding ascii -Value ($lines -join [Environment]::NewLine)
             $sw = [Diagnostics.Stopwatch]::StartNew()
             & .\i701.exe "step_$n.ini" *> "step_$n.log"
             $rc = $LASTEXITCODE
