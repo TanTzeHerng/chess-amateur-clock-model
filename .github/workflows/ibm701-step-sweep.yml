@@ -1,0 +1,81 @@
+name: IBM701 STEP sweep
+
+on:
+  push:
+    branches: [ibm701-ci-debug]
+  workflow_dispatch:
+
+jobs:
+  step-sweep:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download pinned Open SIMH
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/simh/Development-Binaries/raw/refs/heads/master/simh-2024-07-05_06-07-03-Windows-Win32-4.0-Current-670a3728.zip'
+          curl.exe -L -f --retry 3 -o simh.zip $url
+          $h = (Get-FileHash simh.zip -Algorithm SHA256).Hash.ToLower()
+          if ($h -ne '55c2dde9824b412baf8138adc4d4b545398de99a5c28d2a392b863244c660d65') {
+            throw "SIMH archive hash mismatch: $h"
+          }
+          Expand-Archive simh.zip -DestinationPath simh-unpack
+          $exe = Get-ChildItem simh-unpack -Recurse -Filter i701.exe | Select-Object -First 1
+          if (-not $exe) { throw 'i701.exe not found' }
+          Copy-Item $exe.FullName .\i701.exe
+          Get-Item .\i701.exe | Format-List FullName,Length
+
+      - name: Create infinite-loop IBM 701 image
+        shell: powershell
+        run: |
+          # Two halfword instructions, both "TR 0".
+          Set-Content -Path loop.oct -Encoding ascii -Value '0 010000010000'
+
+      - name: Sweep STEP sizes
+        shell: powershell
+        run: |
+          $sizes = @(25000, 1000000, 10000000, 50000000, 100000000, 200000000, 300000000, 400000000, 500000000)
+          $rows = @()
+          foreach ($n in $sizes) {
+            $ini = @"
+set nothrottle
+load loop.oct
+deposit IC 0
+step $n
+echo AFTER_STEP_$n
+examine IC
+quit
+"@
+            Set-Content -Path "step_$n.ini" -Encoding ascii -Value $ini
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            & .\i701.exe "step_$n.ini" *> "step_$n.log"
+            $rc = $LASTEXITCODE
+            $sw.Stop()
+            $marker = Select-String -Path "step_$n.log" -SimpleMatch "AFTER_STEP_$n" -Quiet
+            $runtimeAbort = Select-String -Path "step_$n.log" -SimpleMatch 'Runtime to terminate it in an unusual way' -Quiet
+            $stepExpired = Select-String -Path "step_$n.log" -Pattern 'Step expired' -Quiet
+            $rows += [pscustomobject]@{
+              Step = $n
+              ExitCode = $rc
+              Seconds = [math]::Round($sw.Elapsed.TotalSeconds,3)
+              Marker = $marker
+              StepExpired = $stepExpired
+              RuntimeAbort = $runtimeAbort
+            }
+            Write-Host "===== STEP $n : rc=$rc sec=$([math]::Round($sw.Elapsed.TotalSeconds,3)) marker=$marker expired=$stepExpired abort=$runtimeAbort ====="
+            Get-Content "step_$n.log" -Tail 30
+            if ($runtimeAbort) { break }
+          }
+          $rows | Format-Table -AutoSize
+          $rows | ConvertTo-Json | Set-Content step-results.json -Encoding utf8
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ibm701-step-sweep
+          path: |
+            step-results.json
+            step_*.log
+            step_*.ini
