@@ -52,18 +52,20 @@ jobs:
           update: true
           install: >-
             make
+            mingw-w64-x86_64-make
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-pkgconf
             git
 
       - name: Build i701.exe
-        shell: msys2 {0}
+        shell: cmd
         run: |
-          set -eux
+          set "PATH=C:\msys64\mingw64\bin;C:\msys64\usr\bin;%PATH%"
           cd simh
-          make -j2 i701
-          ls -l BIN/i701.exe
-          sha256sum BIN/i701.exe
+          call build_mingw.bat i701
+          if not exist BIN\i701.exe exit /b 10
+          dir BIN\i701.exe
+          certutil -hashfile BIN\i701.exe SHA256
 
       - name: Self-test memory and STEP
         shell: powershell
