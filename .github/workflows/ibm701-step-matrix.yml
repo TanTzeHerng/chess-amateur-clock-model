@@ -1,8 +1,6 @@
 name: IBM701 STEP matrix
 
 on:
-  push:
-    branches: [ibm701-ci-debug]
   workflow_dispatch:
 
 jobs:
