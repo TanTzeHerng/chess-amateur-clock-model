@@ -1,8 +1,6 @@
 name: IBM701 STEP sweep
 
 on:
-  push:
-    branches: [ibm701-ci-debug]
   workflow_dispatch:
 
 jobs:
