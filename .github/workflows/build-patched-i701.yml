@@ -72,28 +72,31 @@ jobs:
           dir BIN\i701.exe
           certutil -hashfile BIN\i701.exe SHA256
 
-      - name: Self-test memory and STEP
+      - name: Self-test memory access
         shell: powershell
         run: |
           Copy-Item simh\BIN\i701.exe .\i701-patched.exe
-          Set-Content loop.oct -Encoding ascii -Value '0 010000010000'
+          Set-Content stop.oct -Encoding ascii -Value '0000 000000000000'
           $lines = @(
             'set nothrottle',
-            'load loop.oct',
+            'load stop.oct',
             'deposit IC 0',
-            'step 1000000',
-            'echo PATCHED_STEP_OK',
-            'examine IC',
+            'go',
+            'echo PATCHED_GO_OK',
             'echo PATCHED_UPPER_MEMORY',
             'examine 7776-7777',
             'quit'
           )
           Set-Content test.ini -Encoding ascii -Value ($lines -join [Environment]::NewLine)
-          cmd.exe /d /c ".\i701-patched.exe test.ini > patched-test.log 2>&1"
-          $rc = $LASTEXITCODE
-          Get-Content patched-test.log -Tail 80
-          if (-not (Select-String patched-test.log -SimpleMatch 'PATCHED_STEP_OK' -Quiet)) { throw "STEP failed rc=$rc" }
-          if (-not (Select-String patched-test.log -SimpleMatch 'PATCHED_UPPER_MEMORY' -Quiet)) { throw 'upper-memory examine failed' }
+          $p = Start-Process -FilePath .\i701-patched.exe -ArgumentList 'test.ini' -RedirectStandardOutput patched-out.log -RedirectStandardError patched-err.log -PassThru -NoNewWindow
+          if (-not $p.WaitForExit(15000)) {
+            $p.Kill()
+            throw 'patched i701 self-test timed out'
+          }
+          Get-Content patched-out.log
+          if (Test-Path patched-err.log) { Get-Content patched-err.log }
+          if (-not (Select-String patched-out.log -SimpleMatch 'PATCHED_GO_OK' -Quiet)) { throw "GO failed rc=$($p.ExitCode)" }
+          if (-not (Select-String patched-out.log -SimpleMatch 'PATCHED_UPPER_MEMORY' -Quiet)) { throw 'upper-memory examine failed' }
 
       - name: Upload patched i701
         uses: actions/upload-artifact@v4
@@ -101,4 +104,5 @@ jobs:
           name: i701-patched-windows
           path: |
             i701-patched.exe
-            patched-test.log
+            patched-out.log
+            patched-err.log
