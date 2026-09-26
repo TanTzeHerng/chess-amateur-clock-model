@@ -65,6 +65,7 @@ jobs:
         shell: cmd
         run: |
           set "PATH=C:\msys64\mingw64\bin;C:\msys64\usr\bin;%PATH%"
+          set "SHELL=%ComSpec%"
           cd simh
           call build_mingw.bat i701
           if not exist BIN\i701.exe exit /b 10
