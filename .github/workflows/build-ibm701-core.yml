@@ -40,7 +40,7 @@ jobs:
           Set-Content stop.oct -Encoding ascii -Value '0 000000000000'
           .\ibm701_core.exe stop.oct 0 1000 1000 snapshot.bin stop.flag | Tee-Object core-test.log
           if ($LASTEXITCODE -ne 0) { throw "runtime exit code $LASTEXITCODE" }
-          if (-not (Select-String core-test.log -SimpleMatch 'status=0 halted=1 steps=1' -Quiet)) {
+          if (-not (Select-String -Path core-test.log -SimpleMatch -Pattern 'status=0 halted=1 steps=1' -Quiet)) {
             throw 'runtime STOP self-test failed'
           }
           if ((Get-Item snapshot.bin).Length -ne 16384) { throw 'bad snapshot size' }
