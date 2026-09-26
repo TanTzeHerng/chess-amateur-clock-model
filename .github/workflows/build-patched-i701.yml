@@ -31,7 +31,7 @@ jobs:
           if (-not $c.Contains($old)) { throw 'cpu_unit patch anchor not found' }
           $c = $c.Replace($old, $new)
           Set-Content $cpu -Value $c -Encoding ascii
-          Select-String -Path $cpu -Pattern 'UDATA\\(NULL, UNIT_BINK'
+          Select-String -Path $cpu -SimpleMatch 'UDATA(NULL, UNIT_BINK'
 
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
